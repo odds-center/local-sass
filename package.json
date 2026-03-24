@@ -7,8 +7,9 @@
     "dev": "tsc -p tsconfig.electron.json && cp -r src/main/database/migrations dist-electron/main/database/ && concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
     "dev:electron": "wait-on http://localhost:5173 && electron .",
-    "build": "vite build && tsc -p tsconfig.electron.json && cp -r src/main/database/migrations dist-electron/main/database/ && electron-builder --config electron-builder.config.cjs",
-    "build:mac": "vite build && tsc -p tsconfig.electron.json && cp -r src/main/database/migrations dist-electron/main/database/ && electron-builder --mac --config electron-builder.config.cjs",
+    "build:icon": "node scripts/build-icon.js",
+    "build": "node scripts/build-icon.js && vite build && tsc -p tsconfig.electron.json && cp -r src/main/database/migrations dist-electron/main/database/ && electron-builder --config electron-builder.config.cjs",
+    "build:mac": "node scripts/build-icon.js && vite build && tsc -p tsconfig.electron.json && cp -r src/main/database/migrations dist-electron/main/database/ && electron-builder --mac --config electron-builder.config.cjs",
     "build:win": "vite build && tsc -p tsconfig.electron.json && cp -r src/main/database/migrations dist-electron/main/database/ && electron-builder --win --config electron-builder.config.cjs",
     "typecheck": "tsc --noEmit"
   },

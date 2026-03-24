@@ -2,6 +2,7 @@
 module.exports = {
   appId: 'com.local-sass.app',
   productName: 'HR',
+  icon: 'build/icon',
   directories: {
     output: 'release',
   },
@@ -10,6 +11,7 @@ module.exports = {
     'dist-electron/**/*',
   ],
   mac: {
+    icon: 'build/icon.icns',
     target: [{ target: 'dmg', arch: ['x64', 'arm64'] }],
   },
   win: {
