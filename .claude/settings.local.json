@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)",
+      "Bash(sed -i '' 's/req\\\\.params\\\\.id/String\\(req.params.id\\)/g' /Users/risingcore/Desktop/work/local-sass/src/main/routes/employees.ts /Users/risingcore/Desktop/work/local-sass/src/main/routes/leave-requests.ts /Users/risingcore/Desktop/work/local-sass/src/main/routes/leave-types.ts)",
+      "Bash(sed -i '' 's/req\\\\.params\\\\.year/String\\(req.params.year\\)/g; s/req\\\\.params\\\\.employeeId/String\\(req.params.employeeId\\)/g' /Users/risingcore/Desktop/work/local-sass/src/main/routes/leave-balances.ts)",
+      "Bash(node dist-electron/main/index.js)",
+      "Bash(npx @electron/rebuild -f -w better-sqlite3)",
+      "Bash(node:*)",
+      "Bash(cp:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(/Users/risingcore/Desktop/work/local-sass/src/main/routes/import.ts:*)",
+      "Bash(/Users/risingcore/Desktop/work/local-sass/src/main/database/migrations/002_seed_leave_types.sql:*)",
+      "Bash(npm list:*)",
+      "Bash(npm run:*)",
+      "Bash(node -e \"require\\(''''./node_modules/better-sqlite3''''\\)\")",
+      "Bash(open:*)",
+      "Bash(ssh:*)",
+      "Bash(npm pkg:*)",
+      "Bash(grep -E \"^pg$|^@types/pg$\")",
+      "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); print\\(data[0][''''text'''']\\)\")",
+      "Bash(node -e \"require\\(''express-rate-limit''\\)\")",
+      "Bash(ls -la /Users/risingcore/Desktop/work/local-sass/.env*)",
+      "Bash(pg_isready)",
+      "Bash(docker exec:*)"
+    ]
+  }
+}

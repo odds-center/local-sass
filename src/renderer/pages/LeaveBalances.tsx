@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import BigNumber from 'bignumber.js'
 import { LeaveBalance } from '../../shared/types'
 import { api } from '../lib/api'
 import { Pencil, Check, X } from 'lucide-react'
 
-// 1일 = 8시간, 0.5시간(30분) 단위
-const HPD = new BigNumber(8) // hours per day
+const HPD = new BigNumber(8)
 
 function daysToHours(days: number): number {
   return new BigNumber(days).multipliedBy(HPD).decimalPlaces(1).toNumber()
@@ -28,41 +29,39 @@ function adjustHours(current: number, delta: number): number {
   return BigNumber.max(0, new BigNumber(current).plus(delta)).decimalPlaces(1).toNumber()
 }
 
-// 0.5시간 단위 선택 옵션 (0.5h ~ 200h)
 const HOUR_OPTIONS: number[] = Array.from({ length: 400 }, (_, i) =>
   new BigNumber(i + 1).multipliedBy(0.5).toNumber()
 )
 
-type EditMode = 'hours' | 'quick'
-
 export default function LeaveBalances() {
-  const [balances, setBalances] = useState<LeaveBalance[]>([])
+  const qc = useQueryClient()
   const [year, setYear] = useState(new Date().getFullYear())
-  const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editHours, setEditHours] = useState<number>(0)
-  const [editMode, setEditMode] = useState<EditMode>('hours')
 
-  const load = async () => {
-    setLoading(true)
-    setBalances(await api.leaveBalances.listByYear(year))
-    setLoading(false)
-  }
+  const { data: balances = [], isLoading } = useQuery({
+    queryKey: ['leave-balances', year],
+    queryFn: () => api.leaveBalances.listByYear(year),
+  })
 
-  useEffect(() => { load() }, [year])
+  const adjustMutation = useMutation({
+    mutationFn: ({ id, days }: { id: string; days: number }) => api.leaveBalances.adjust(id, days),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['leave-balances', year] })
+      setEditingId(null)
+      toast.success('수정되었습니다.')
+    },
+    onError: (err) => toast.error((err as Error).message),
+  })
 
   const openEdit = (b: LeaveBalance) => {
     setEditingId(b.id)
     setEditHours(daysToHours(b.allocated_days))
-    setEditMode('hours')
   }
 
-  const handleAdjust = async (id: string) => {
+  const handleAdjust = (id: string) => {
     if (editHours < 0) return
-    const days = hoursToDays(editHours)
-    await api.leaveBalances.adjust(id, days)
-    setEditingId(null)
-    await load()
+    adjustMutation.mutate({ id, days: hoursToDays(editHours) })
   }
 
   const filtered = balances.filter((b) => b.leave_type_name?.includes('연차'))
@@ -88,7 +87,7 @@ export default function LeaveBalances() {
         </select>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <p className="text-zinc-600 text-sm">불러오는 중...</p>
       ) : Object.keys(byEmployee).length === 0 ? (
         <p className="text-center py-12 text-zinc-600 text-sm">데이터가 없습니다.</p>
@@ -116,7 +115,6 @@ export default function LeaveBalances() {
 
                     return (
                       <tr key={b.id} className={`transition-colors ${isEditing ? 'bg-zinc-800/60' : 'hover:bg-zinc-800/30'}`}>
-                        {/* 종류 */}
                         <td className="px-5 py-3">
                           <span className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: b.leave_type_color ?? '#8b5cf6' }} />
@@ -124,29 +122,24 @@ export default function LeaveBalances() {
                           </span>
                         </td>
 
-                        {/* 부여 */}
                         <td className="px-5 py-3 text-right">
                           <span className="text-zinc-400">{formatDays(b.allocated_days)}</span>
                           <span className="text-zinc-600 text-xs ml-1">({daysToHours(b.allocated_days)}h)</span>
                         </td>
 
-                        {/* 사용 */}
                         <td className="px-5 py-3 text-right">
                           <span className="text-zinc-400">{formatDays(b.used_days)}</span>
                           <span className="text-zinc-600 text-xs ml-1">({daysToHours(b.used_days)}h)</span>
                         </td>
 
-                        {/* 잔여 */}
                         <td className={`px-5 py-3 text-right font-semibold ${remaining < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                           {formatDays(remaining)}
                           <span className="text-xs font-normal ml-1 opacity-60">({daysToHours(remaining)}h)</span>
                         </td>
 
-                        {/* 조정 */}
                         <td className="px-5 py-3 text-right">
                           {isEditing ? (
                             <div className="flex flex-col gap-2 items-end">
-                              {/* 시간 직접 입력 */}
                               <div className="flex items-center gap-1.5">
                                 <select
                                   value={editHours}
@@ -161,7 +154,6 @@ export default function LeaveBalances() {
                                 </select>
                               </div>
 
-                              {/* +/- 빠른 조정 버튼 */}
                               <div className="flex items-center gap-1">
                                 {[-4, -0.5, +0.5, +4].map((delta) => (
                                   <button
@@ -179,7 +171,7 @@ export default function LeaveBalances() {
                               </div>
 
                               <div className="flex gap-2">
-                                <button onClick={() => handleAdjust(b.id)} className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"><Check size={12} />저장</button>
+                                <button onClick={() => handleAdjust(b.id)} disabled={adjustMutation.isPending} className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"><Check size={12} />저장</button>
                                 <button onClick={() => setEditingId(null)} className="flex items-center gap-1 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"><X size={12} />취소</button>
                               </div>
                             </div>

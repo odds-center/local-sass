@@ -1,6 +1,8 @@
 export type EmployeeRole = 'employee' | 'manager' | 'admin'
 export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
 export type LeaveUnit = 'day' | 'half_am' | 'half_pm' | 'hour'
+export type ChannelType = 'leave_management' | 'scrum'
+export type WebhookType = 'discord' | 'slack' | 'teams' | 'custom'
 
 export interface Employee {
   id: string
@@ -59,6 +61,32 @@ export interface LeaveRequest {
   reviewer_name?: string
 }
 
+export interface ChannelConfig {
+  webhook_url?: string
+  webhook_type?: WebhookType
+  google_calendar_id?: string
+}
+
+export interface Channel {
+  id: string
+  tenant_id: string
+  name: string
+  type: ChannelType
+  config: ChannelConfig
+  created_at: string
+  updated_at: string
+}
+
+export interface TenantSettings {
+  app_company_name: string
+  google_client_id: string
+  google_client_secret: string
+  google_refresh_token: string
+  google_calendar_id: string
+  host_ips: string[]
+}
+
+/** @deprecated use TenantSettings + Channel */
 export interface AppSettings {
   discord_webhook_url: string
   scrum_webhook_url: string
@@ -84,41 +112,6 @@ export interface Scrum {
   created_at: string
   updated_at: string
   employee_name?: string
-}
-
-export interface Api {
-  employees: {
-    list: () => Promise<Employee[]>
-    create: (data: Omit<Employee, 'id' | 'created_at'>) => Promise<Employee>
-    update: (id: string, data: Partial<Omit<Employee, 'id' | 'created_at'>>) => Promise<Employee>
-    deactivate: (id: string) => Promise<void>
-    activate: (id: string) => Promise<void>
-    delete: (id: string) => Promise<void>
-  }
-  leaveRequests: {
-    list: (filters?: LeaveRequestFilters) => Promise<LeaveRequest[]>
-    create: (data: CreateLeaveRequestInput) => Promise<LeaveRequest>
-    approve: (id: string, reviewerId: string, note?: string) => Promise<LeaveRequest>
-    reject: (id: string, reviewerId: string, note?: string) => Promise<LeaveRequest>
-    cancel: (id: string) => Promise<LeaveRequest>
-  }
-  leaveBalances: {
-    listByYear: (year: number) => Promise<LeaveBalance[]>
-    getByEmployee: (employeeId: string, year: number) => Promise<LeaveBalance[]>
-    adjust: (id: string, allocated_days: number) => Promise<LeaveBalance>
-  }
-  leaveTypes: {
-    list: () => Promise<LeaveType[]>
-    create: (data: Omit<LeaveType, 'id'>) => Promise<LeaveType>
-    update: (id: string, data: Partial<Omit<LeaveType, 'id'>>) => Promise<LeaveType>
-  }
-  settings: {
-    get: () => Promise<AppSettings>
-    set: (data: Partial<AppSettings>) => Promise<void>
-    testDiscord: () => Promise<{ ok: boolean; error?: string }>
-    connectGoogle: () => Promise<{ ok: boolean; error?: string }>
-    listCalendars: () => Promise<{ id: string; summary: string }[]>
-  }
 }
 
 export interface LeaveRequestFilters {

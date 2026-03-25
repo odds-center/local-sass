@@ -1,82 +1,58 @@
+import axios from 'axios'
 import {
   Employee,
   LeaveRequest,
   LeaveBalance,
   LeaveType,
-  AppSettings,
+  TenantSettings,
+  Channel,
+  ChannelConfig,
+  ChannelType,
   LeaveRequestFilters,
   CreateLeaveRequestInput,
   Scrum,
   ScrumItem,
 } from '../../shared/types'
 
-const BASE = '/api'
+const client = axios.create({ baseURL: '/api' })
 
-function getToken(): string | null {
-  return localStorage.getItem('token')
-}
+client.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
 
-async function request<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-  requiresAuth = true
-): Promise<T> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+client.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      window.location.href = '/#/login'
+    }
+    const message = error.response?.data?.error ?? error.message
+    return Promise.reject(new Error(message))
   }
+)
 
-  if (requiresAuth) {
-    const token = getToken()
-    if (token) headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
-
-  if (res.status === 401) {
-    localStorage.removeItem('token')
-    window.location.href = '/#/login'
-    throw new Error('Unauthorized')
-  }
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error ?? res.statusText)
-  }
-
-  if (res.status === 204) return undefined as T
-  return res.json() as Promise<T>
-}
-
-const get = <T>(path: string) => request<T>('GET', path)
-const post = <T>(path: string, body?: unknown, auth = true) => request<T>('POST', path, body, auth)
-const put = <T>(path: string, body?: unknown) => request<T>('PUT', path, body)
-const patch = <T>(path: string, body?: unknown) => request<T>('PATCH', path, body)
-const del = <T>(path: string) => request<T>('DELETE', path)
+const get = <T>(path: string) => client.get<T>(path).then((r) => r.data)
+const post = <T>(path: string, body?: unknown) => client.post<T>(path, body).then((r) => r.data)
+const put = <T>(path: string, body?: unknown) => client.put<T>(path, body).then((r) => r.data)
+const patch = <T>(path: string, body?: unknown) => client.patch<T>(path, body).then((r) => r.data)
+const del = <T>(path: string) => client.delete<T>(path).then((r) => r.data)
 
 export const api = {
   setup: {
     status: () => get<{ needsSetup: boolean }>('/setup/status'),
-    init: (data: {
-      companyName: string
-      name: string
-      email: string
-      password: string
-      discordWebhookUrl?: string
-    }) => post<{ token: string; user: { id: string; name: string; email: string; role: string } }>(
-      '/setup/init', data, false
-    ),
+    init: (data: { companyName: string; name: string; email: string; password: string }) =>
+      post<{ token: string; user: { id: string; name: string; email: string; role: string } }>(
+        '/setup/init', data
+      ),
   },
+
   auth: {
     login: (email: string, password: string) =>
       post<{ token: string; user: Pick<Employee, 'id' | 'name' | 'email' | 'role' | 'department'> }>(
-        '/auth/login',
-        { email, password },
-        false
+        '/auth/login', { email, password }
       ),
     me: () => get<Pick<Employee, 'id' | 'name' | 'email' | 'role' | 'department'>>('/auth/me'),
   },
@@ -103,10 +79,8 @@ export const api = {
       return get<LeaveRequest[]>(`/leave-requests${qs ? `?${qs}` : ''}`)
     },
     create: (data: CreateLeaveRequestInput) => post<LeaveRequest>('/leave-requests', data),
-    approve: (id: string, note?: string) =>
-      post<LeaveRequest>(`/leave-requests/${id}/approve`, { note }),
-    reject: (id: string, note?: string) =>
-      post<LeaveRequest>(`/leave-requests/${id}/reject`, { note }),
+    approve: (id: string, note?: string) => post<LeaveRequest>(`/leave-requests/${id}/approve`, { note }),
+    reject: (id: string, note?: string) => post<LeaveRequest>(`/leave-requests/${id}/reject`, { note }),
     cancel: (id: string) => post<LeaveRequest>(`/leave-requests/${id}/cancel`),
   },
 
@@ -125,32 +99,34 @@ export const api = {
       put<LeaveType>(`/leave-types/${id}`, data),
   },
 
+  channels: {
+    list: () => get<Channel[]>('/channels'),
+    create: (data: { name: string; type: ChannelType; config?: ChannelConfig }) =>
+      post<Channel>('/channels', data),
+    update: (id: string, data: { name?: string; config?: ChannelConfig }) =>
+      put<Channel>(`/channels/${id}`, data),
+    delete: (id: string) => del<void>(`/channels/${id}`),
+    testWebhook: (id: string) => post<{ ok: boolean; error?: string }>(`/channels/${id}/test-webhook`),
+  },
+
   import: {
     downloadTemplate: () => {
       const content = [
         '이름,시작일,종료일,항목,사용일수,상태,부여일,부여시간',
         '# 아래 예시를 참고하여 작성하세요. # 으로 시작하는 줄은 무시됩니다.',
-        '# [발생 행] 연차/월차 부여 — 시작일/종료일/사용일수/상태는 비워두세요.',
         '홍길동,,,연차발생,,,2026-01-01,120',
-        '# [휴가 행] 부여일/부여시간은 비워두세요.',
         '홍길동,2026-03-10,2026-03-10,연차,1,승인완료,,',
         '홍길동,2026-02-13,2026-02-13,연차,0.5,승인완료,,',
-        '홍길동,2026-01-20,2026-01-20,연차,1,휴가취소,,',
         '# 상태값: 승인완료 | 휴가취소 | 반려',
         '# 사용일수: 1일=1  반차=0.5',
-        '# 부여시간: 시간 단위 (1일=8 시간, 15일=120 시간)',
+        '# 부여시간: 시간 단위 (15일=120 시간)',
       ].join('\n')
-
-      const bom = '\uFEFF'
-      const blob = new Blob([bom + content], { type: 'text/csv;charset=utf-8;' })
+      const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url
-      a.download = 'hr_import_template.csv'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      a.href = url; a.download = 'hr_import_template.csv'
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(url)
     },
     upload: (csvText: string, employeeId?: string) =>
       post<{ ok: boolean; importedRequests: number; importedBalances: number; skipped: number; employeeId: string }>(
@@ -168,9 +144,10 @@ export const api = {
   },
 
   settings: {
-    get: () => get<AppSettings & { host_ips: string[] }>('/settings'),
-    set: (data: Partial<AppSettings>) => put<{ ok: boolean }>('/settings', data),
-    testDiscord: () => post<{ ok: boolean; error?: string }>('/settings/test-discord'),
+    get: () => get<TenantSettings>('/settings'),
+    set: (data: Partial<TenantSettings>) => put<{ ok: boolean }>('/settings', data),
+    testDiscord: (webhook_url: string) =>
+      post<{ ok: boolean; error?: string }>('/settings/test-discord', { webhook_url }),
     connectGoogle: () => post<{ ok: boolean; error?: string }>('/settings/connect-google'),
     listCalendars: () => get<{ id: string; summary: string }[]>('/settings/calendars'),
   },

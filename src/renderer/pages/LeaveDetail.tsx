@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { LeaveRequest, LeaveUnit } from '../../shared/types'
 import LeaveStatusBadge from '../components/LeaveStatusBadge'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -19,38 +21,41 @@ function formatUnit(unit: LeaveUnit, hours: number | null, days: number, startTi
 export default function LeaveDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [request, setRequest] = useState<LeaveRequest | null>(null)
-  const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null)
+  const qc = useQueryClient()
   const [reviewNote, setReviewNote] = useState('')
   const [dialog, setDialog] = useState<'approve' | 'reject' | 'cancel' | null>(null)
-  const [_loading, setLoading] = useState(false)
 
-  const load = async () => {
-    const [requests, me] = await Promise.all([api.leaveRequests.list(), api.auth.me()])
-    setRequest(requests.find((r) => r.id === id) ?? null)
-    setCurrentUser(me)
+  const { data: requests = [] } = useQuery({
+    queryKey: ['leave-requests'],
+    queryFn: () => api.leaveRequests.list(),
+  })
+  const { data: currentUser } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => api.auth.me(),
+  })
+
+  const request: LeaveRequest | null = requests.find((r) => r.id === id) ?? null
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['leave-requests'] })
+    qc.invalidateQueries({ queryKey: ['leave-balances'] })
   }
 
-  useEffect(() => { load() }, [id])
-
-  const handleApprove = async () => {
-    if (!request) return
-    setLoading(true)
-    await api.leaveRequests.approve(request.id, reviewNote)
-    setDialog(null); await load(); setLoading(false)
-  }
-  const handleReject = async () => {
-    if (!request) return
-    setLoading(true)
-    await api.leaveRequests.reject(request.id, reviewNote)
-    setDialog(null); await load(); setLoading(false)
-  }
-  const handleCancel = async () => {
-    if (!request) return
-    setLoading(true)
-    await api.leaveRequests.cancel(request.id)
-    setDialog(null); await load(); setLoading(false)
-  }
+  const approveMutation = useMutation({
+    mutationFn: () => api.leaveRequests.approve(request!.id, reviewNote),
+    onSuccess: () => { invalidate(); setDialog(null); toast.success('승인되었습니다.') },
+    onError: (err) => toast.error((err as Error).message),
+  })
+  const rejectMutation = useMutation({
+    mutationFn: () => api.leaveRequests.reject(request!.id, reviewNote),
+    onSuccess: () => { invalidate(); setDialog(null); toast.success('거절되었습니다.') },
+    onError: (err) => toast.error((err as Error).message),
+  })
+  const cancelMutation = useMutation({
+    mutationFn: () => api.leaveRequests.cancel(request!.id),
+    onSuccess: () => { invalidate(); setDialog(null); toast.success('취소되었습니다.') },
+    onError: (err) => toast.error((err as Error).message),
+  })
 
   if (!request) return <div className="text-zinc-500 text-sm pt-20 text-center">불러오는 중...</div>
 
@@ -119,9 +124,9 @@ export default function LeaveDetail() {
         </button>
       )}
 
-      <ConfirmDialog open={dialog === 'approve'} title="휴가 승인" message="이 휴가 신청을 승인하시겠습니까?" confirmLabel="승인" onConfirm={handleApprove} onCancel={() => setDialog(null)} />
-      <ConfirmDialog open={dialog === 'reject'} title="휴가 거절" message="이 휴가 신청을 거절하시겠습니까?" confirmLabel="거절" onConfirm={handleReject} onCancel={() => setDialog(null)} />
-      <ConfirmDialog open={dialog === 'cancel'} title="신청 취소" message="이 신청을 취소하시겠습니까?" confirmLabel="취소하기" onConfirm={handleCancel} onCancel={() => setDialog(null)} />
+      <ConfirmDialog open={dialog === 'approve'} title="휴가 승인" message="이 휴가 신청을 승인하시겠습니까?" confirmLabel="승인" onConfirm={() => approveMutation.mutate()} onCancel={() => setDialog(null)} />
+      <ConfirmDialog open={dialog === 'reject'} title="휴가 거절" message="이 휴가 신청을 거절하시겠습니까?" confirmLabel="거절" onConfirm={() => rejectMutation.mutate()} onCancel={() => setDialog(null)} />
+      <ConfirmDialog open={dialog === 'cancel'} title="신청 취소" message="이 신청을 취소하시겠습니까?" confirmLabel="취소하기" onConfirm={() => cancelMutation.mutate()} onCancel={() => setDialog(null)} />
     </div>
   )
 }

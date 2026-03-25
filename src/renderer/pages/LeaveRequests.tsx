@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { LeaveRequest, LeaveStatus, LeaveUnit } from '../../shared/types'
+import { useQuery } from '@tanstack/react-query'
+import { LeaveStatus, LeaveUnit } from '../../shared/types'
 import LeaveStatusBadge from '../components/LeaveStatusBadge'
 import { api } from '../lib/api'
 import { Plus } from 'lucide-react'
@@ -25,19 +26,13 @@ function formatUnit(unit: LeaveUnit, hours: number | null, startTime?: string | 
 
 export default function LeaveRequests() {
   const navigate = useNavigate()
-  const [requests, setRequests] = useState<LeaveRequest[]>([])
   const [statusFilter, setStatusFilter] = useState<LeaveStatus | ''>('')
   const [year, setYear] = useState(new Date().getFullYear())
-  const [loading, setLoading] = useState(true)
 
-  const load = async () => {
-    setLoading(true)
-    const data = await api.leaveRequests.list({ status: statusFilter || undefined, year })
-    setRequests(data)
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [statusFilter, year])
+  const { data: requests = [], isLoading } = useQuery({
+    queryKey: ['leave-requests', { status: statusFilter, year }],
+    queryFn: () => api.leaveRequests.list({ status: statusFilter || undefined, year }),
+  })
 
   const sel = 'bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg pl-3 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500'
 
@@ -58,7 +53,7 @@ export default function LeaveRequests() {
       </div>
 
       <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
-        {loading ? (
+        {isLoading ? (
           <p className="text-center py-12 text-zinc-600 text-sm">불러오는 중...</p>
         ) : requests.length === 0 ? (
           <p className="text-center py-12 text-zinc-600 text-sm">신청 내역이 없습니다.</p>

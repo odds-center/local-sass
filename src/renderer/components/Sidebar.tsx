@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../store/auth'
 import {
   LayoutDashboard,
   CalendarDays,
@@ -9,6 +10,8 @@ import {
   LogOut,
   Plus,
   ClipboardList,
+  Layers,
+  Tag,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
@@ -16,13 +19,16 @@ const NAV_ITEMS = [
   { to: '/leave-requests',label: '휴가 신청',   Icon: CalendarDays },
   { to: '/employees',     label: '직원 관리',   Icon: Users },
   { to: '/leave-balances',label: '잔여 일수',   Icon: BarChart2 },
+  { to: '/leave-types',   label: '휴가 종류',   Icon: Tag },
   { to: '/scrum',         label: '스크럼',      Icon: ClipboardList },
+  { to: '/channels',      label: '채널',        Icon: Layers },
   { to: '/import',        label: '데이터 임포트', Icon: Upload },
   { to: '/settings',      label: '설정',        Icon: Settings },
 ]
 
 export default function Sidebar() {
   const navigate = useNavigate()
+  const logout = useAuthStore((s) => s.logout)
 
   return (
     <aside className="w-52 bg-zinc-950 border-r border-zinc-800 flex flex-col shrink-0">
@@ -75,7 +81,7 @@ export default function Sidebar() {
           휴가 신청
         </NavLink>
         <button
-          onClick={() => { localStorage.removeItem('token'); navigate('/login') }}
+          onClick={() => { logout(); navigate('/login') }}
           className="flex items-center justify-center gap-2 w-full py-1.5 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
         >
           <LogOut size={13} strokeWidth={1.75} />

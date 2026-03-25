@@ -1,68 +1,58 @@
 import { useEffect, useState } from 'react'
-import { AppSettings } from '../../shared/types'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { TenantSettings } from '../../shared/types'
 import { api } from '../lib/api'
-import { Send, Link2, RefreshCw, CheckCircle, XCircle, Save } from 'lucide-react'
-
-type SettingsWithIPs = AppSettings & { host_ips: string[] }
+import { Link2, RefreshCw, CheckCircle, Save } from 'lucide-react'
 
 const inp = 'w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-colors'
 
 export default function Settings() {
-  const [settings, setSettings] = useState<SettingsWithIPs | null>(null)
+  const [settings, setSettings] = useState<TenantSettings | null>(null)
   const [calendars, setCalendars] = useState<{ id: string; summary: string }[]>([])
-  const [saving, setSaving] = useState(false)
-  const [toast, setToast] = useState('')
 
-  useEffect(() => {
-    api.settings.get().then(setSettings).catch(() => {
-      showToast('설정을 불러오는 중 오류가 발생했습니다. (관리자 권한 필요)')
-    })
-  }, [])
+  const { data: settingsData, error: settingsError } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.settings.get(),
+  })
 
-  const save = async () => {
-    if (!settings) return
-    setSaving(true)
-    await api.settings.set(settings)
-    setSaving(false)
-    showToast('저장되었습니다.')
-  }
+  useEffect(() => { if (settingsData) setSettings(settingsData) }, [settingsData])
+  useEffect(() => { if (settingsError) toast.error('설정을 불러오는 중 오류가 발생했습니다. (관리자 권한 필요)') }, [settingsError])
 
-  const testDiscord = async () => {
-    const result = await api.settings.testDiscord()
-    showToast(result.ok ? 'Discord 연결 성공!' : `실패: ${result.error}`)
-  }
+  const saveMutation = useMutation({
+    mutationFn: () => api.settings.set(settings!),
+    onSuccess: () => toast.success('저장되었습니다.'),
+    onError: (err) => toast.error((err as Error).message),
+  })
 
-  const connectGoogle = async () => {
-    showToast('브라우저에서 Google 계정으로 로그인하세요...')
-    const result = await api.settings.connectGoogle()
-    if (result.ok) {
-      showToast('Google 연결 완료!')
-      const cals = await api.settings.listCalendars()
-      setCalendars(cals)
-    } else {
-      showToast(`실패: ${result.error}`)
-    }
-  }
+  const connectMutation = useMutation({
+    mutationFn: () => api.settings.connectGoogle(),
+    onSuccess: async (result) => {
+      if (result.ok) {
+        toast.success('Google 연결 완료!')
+        const cals = await api.settings.listCalendars()
+        setCalendars(cals)
+      } else {
+        toast.error(`실패: ${result.error}`)
+      }
+    },
+    onError: (err) => toast.error((err as Error).message),
+  })
 
-  const showToast = (msg: string) => {
-    setToast(msg)
-    setTimeout(() => setToast(''), 4000)
+  const refreshCalendars = () => {
+    api.settings.listCalendars().then(setCalendars).catch((err) => toast.error((err as Error).message))
   }
 
   if (!settings) return (
-    <div className="text-zinc-500 text-sm p-4">{toast || '설정 페이지는 관리자만 접근할 수 있습니다.'}</div>
+    <div className="text-zinc-500 text-sm p-4">관리자만 접근할 수 있습니다.</div>
   )
 
-  const set = (key: keyof AppSettings, val: string) =>
+  const set = (key: keyof TenantSettings, val: string) =>
     setSettings((s) => s ? { ...s, [key]: val } : s)
 
   return (
     <div className="max-w-lg space-y-6">
       <h1 className="text-xl font-bold text-zinc-100">설정</h1>
-
-      {toast && (
-        <div className="bg-violet-500/10 border border-violet-500/30 text-violet-300 text-sm px-4 py-3 rounded-lg">{toast}</div>
-      )}
 
       {settings.host_ips.length > 0 && (
         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 space-y-2">
@@ -87,16 +77,6 @@ export default function Settings() {
         </Field>
       </Section>
 
-      <Section title="Discord 웹훅">
-        <Field label="휴가 알림 Webhook URL">
-          <input value={settings.discord_webhook_url} onChange={(e) => set('discord_webhook_url', e.target.value)} className={inp} placeholder="https://discord.com/api/webhooks/..." />
-        </Field>
-        <button onClick={testDiscord} className="flex items-center gap-1.5 text-sm text-violet-400 hover:text-violet-300 transition-colors"><Send size={13} />테스트 메시지 전송</button>
-        <Field label="스크럼 Webhook URL">
-          <input value={settings.scrum_webhook_url} onChange={(e) => set('scrum_webhook_url', e.target.value)} className={inp} placeholder="https://discord.com/api/webhooks/..." />
-        </Field>
-      </Section>
-
       <Section title="Google Calendar">
         <p className="text-xs text-zinc-500 mb-3">
           GCP Console에서 OAuth 2.0 클라이언트 ID를 생성하고 리디렉션 URI에{' '}
@@ -109,24 +89,30 @@ export default function Settings() {
           <input type="password" value={settings.google_client_secret} onChange={(e) => set('google_client_secret', e.target.value)} className={inp} />
         </Field>
         <div className="flex gap-3 items-center flex-wrap">
-          <button onClick={connectGoogle} className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-red-600/80 hover:bg-red-600 rounded-lg transition-colors"><Link2 size={14} />Google 계정 연결</button>
-          {settings.google_refresh_token === '연결됨' && <span className="flex items-center gap-1 text-xs text-emerald-400"><CheckCircle size={13} />연결됨</span>}
+          <button onClick={() => connectMutation.mutate()} disabled={connectMutation.isPending} className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-red-600/80 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-40">
+            <Link2 size={14} />{connectMutation.isPending ? '연결 중...' : 'Google 계정 연결'}
+          </button>
+          {settings.google_refresh_token === '연결됨' && (
+            <span className="flex items-center gap-1 text-xs text-emerald-400"><CheckCircle size={13} />연결됨</span>
+          )}
         </div>
         {settings.google_refresh_token === '연결됨' && (
-          <Field label="Google 캘린더">
+          <Field label="기본 Google 캘린더">
             <div className="flex gap-2">
               <select value={settings.google_calendar_id} onChange={(e) => set('google_calendar_id', e.target.value)} className={inp}>
                 <option value="">캘린더 선택</option>
                 {calendars.map((c) => <option key={c.id} value={c.id}>{c.summary}</option>)}
               </select>
-              <button onClick={() => api.settings.listCalendars().then(setCalendars)} className="flex items-center gap-1 px-3 py-2 text-xs bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-700 transition-colors shrink-0"><RefreshCw size={12} />새로고침</button>
+              <button onClick={refreshCalendars} className="flex items-center gap-1 px-3 py-2 text-xs bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-700 transition-colors shrink-0">
+                <RefreshCw size={12} />새로고침
+              </button>
             </div>
           </Field>
         )}
       </Section>
 
-      <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-2 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40">
-        {saving ? '저장 중...' : <><Save size={15} />설정 저장</>}
+      <button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full flex items-center justify-center gap-2 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40">
+        {saveMutation.isPending ? '저장 중...' : <><Save size={15} />설정 저장</>}
       </button>
     </div>
   )

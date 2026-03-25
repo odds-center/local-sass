@@ -1,40 +1,35 @@
 import { Router, Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { getDb } from '../database/db'
-import { createEmployee } from '../database/queries/employees'
-import { initBalancesForEmployee } from '../database/queries/leave-balances'
-import { saveSettings } from '../ipc/settings'
+import { v4 as uuidv4 } from 'uuid'
+import { AppDataSource } from '../database/data-source'
+import { TenantEntity } from '../database/entities/Tenant'
+import { EmployeeEntity } from '../database/entities/Employee'
+import { LeaveBalanceEntity } from '../database/entities/LeaveBalance'
+import { LeaveTypeEntity } from '../database/entities/LeaveType'
 import { JWT_SECRET } from '../middleware/auth'
 
 const router = Router()
 
 // 초기 설정이 필요한지 확인 (인증 불필요)
-router.get('/status', (_req: Request, res: Response) => {
-  const count = (getDb()
-    .prepare('SELECT COUNT(*) as count FROM employees WHERE is_active = 1')
-    .get() as { count: number }).count
-
+router.get('/status', async (_req: Request, res: Response) => {
+  const count = await AppDataSource.getRepository(TenantEntity).count()
   res.json({ needsSetup: count === 0 })
 })
 
-// 초기 설정 실행 (인증 불필요, 직원이 0명일 때만 허용)
+// 초기 설정 실행 (인증 불필요, 테넌트가 없을 때만 허용)
 router.post('/init', async (req: Request, res: Response) => {
-  const count = (getDb()
-    .prepare('SELECT COUNT(*) as count FROM employees')
-    .get() as { count: number }).count
-
-  if (count > 0) {
+  const tenantCount = await AppDataSource.getRepository(TenantEntity).count()
+  if (tenantCount > 0) {
     res.status(403).json({ error: '이미 설정이 완료되었습니다.' })
     return
   }
 
-  const { companyName, name, email, password, discordWebhookUrl } = req.body as {
+  const { companyName, name, email, password } = req.body as {
     companyName: string
     name: string
     email: string
     password: string
-    discordWebhookUrl?: string
   }
 
   if (!name || !email || !password) {
@@ -42,41 +37,72 @@ router.post('/init', async (req: Request, res: Response) => {
     return
   }
 
-  const password_hash = await bcrypt.hash(password, 10)
+  try {
+    const result = await AppDataSource.transaction(async (manager) => {
+      // 1. 테넌트 생성
+      const tenant = manager.create(TenantEntity, {
+        id: uuidv4(),
+        name: companyName || name,
+        slug: (companyName || name).toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'default',
+        app_company_name: companyName || '',
+      })
+      await manager.save(tenant)
 
-  // 첫 관리자 직원 생성
-  const employee = createEmployee({
-    name,
-    email: email.toLowerCase().trim(),
-    department: null,
-    role: 'admin',
-    discord_tag: null,
-    is_active: 1,
-  })
+      // 2. 관리자 직원 생성
+      const password_hash = await bcrypt.hash(password, 10)
+      const employee = manager.create(EmployeeEntity, {
+        id: uuidv4(),
+        tenant_id: tenant.id,
+        name,
+        email: email.toLowerCase().trim(),
+        department: null,
+        role: 'admin',
+        discord_tag: null,
+        is_active: 1,
+        password_hash,
+      })
+      await manager.save(employee)
 
-  // 비밀번호 해시 저장
-  getDb()
-    .prepare('UPDATE employees SET password_hash = ? WHERE id = ?')
-    .run(password_hash, employee.id)
+      // 3. 기본 연차 종류 생성
+      const leaveType = manager.create(LeaveTypeEntity, {
+        id: uuidv4(),
+        tenant_id: tenant.id,
+        name: '연차',
+        default_days: 15,
+        carry_over_max: 0,
+        color: '#8b5cf6',
+      })
+      await manager.save(leaveType)
 
-  // 현재 연도 잔여 일수 초기화
-  initBalancesForEmployee(employee.id, new Date().getFullYear())
+      // 4. 현재 연도 잔여 일수 초기화
+      const balance = manager.create(LeaveBalanceEntity, {
+        id: uuidv4(),
+        tenant_id: tenant.id,
+        employee_id: employee.id,
+        leave_type_id: leaveType.id,
+        year: new Date().getFullYear(),
+        allocated_days: 15,
+        used_days: 0,
+      })
+      await manager.save(balance)
 
-  // 설정 저장
-  saveSettings({
-    app_company_name: companyName ?? '',
-    current_user_id: employee.id,
-    discord_webhook_url: discordWebhookUrl ?? '',
-  })
+      return { tenant, employee }
+    })
 
-  // 자동 로그인용 JWT 발급
-  const token = jwt.sign(
-    { id: employee.id, email: employee.email, role: 'admin' },
-    JWT_SECRET,
-    { expiresIn: '1y' }
-  )
+    const token = jwt.sign(
+      { id: result.employee.id, email: result.employee.email, role: 'admin', tenant_id: result.tenant.id },
+      JWT_SECRET,
+      { expiresIn: '1y' }
+    )
 
-  res.status(201).json({ token, user: { id: employee.id, name, email, role: 'admin' } })
+    res.status(201).json({
+      token,
+      user: { id: result.employee.id, name, email: result.employee.email, role: 'admin' },
+    })
+  } catch (e) {
+    console.error('[Setup] init error:', e)
+    res.status(500).json({ error: '설정 중 오류가 발생했습니다.' })
+  }
 })
 
 export default router

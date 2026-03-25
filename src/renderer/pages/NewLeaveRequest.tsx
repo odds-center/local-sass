@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { ArrowLeft } from 'lucide-react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { leaveRequestSchema, LeaveRequestFormData } from '../../shared/schemas'
-import { Employee, LeaveType, LeaveBalance, LeaveUnit } from '../../shared/types'
+import { LeaveUnit } from '../../shared/types'
 import { differenceInBusinessDays, parseISO, addDays } from 'date-fns'
 import DatePicker from '../components/DatePicker'
 import { api } from '../lib/api'
@@ -16,7 +18,6 @@ const UNIT_OPTIONS: { value: LeaveUnit; label: string; desc: string }[] = [
   { value: 'hour',    label: '시간 단위', desc: '시작~종료 시간 선택' },
 ]
 
-// 07:00 ~ 22:00, 30분 단위
 const TIME_SLOTS: string[] = []
 for (let h = 7; h <= 22; h++) {
   TIME_SLOTS.push(`${String(h).padStart(2, '0')}:00`)
@@ -36,9 +37,7 @@ const sel = inp
 
 export default function NewLeaveRequest() {
   const navigate = useNavigate()
-  const [employees, setEmployees] = useState<Employee[]>([])
-  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([])
-  const [balances, setBalances] = useState<LeaveBalance[]>([])
+  const qc = useQueryClient()
 
   const { register, handleSubmit, watch, setValue, control, formState: { errors, isSubmitting } } = useForm<LeaveRequestFormData>({
     resolver: zodResolver(leaveRequestSchema),
@@ -57,10 +56,31 @@ export default function NewLeaveRequest() {
   const isHourly = leaveUnit === 'hour'
   const isSingleDay = isHalfDay || isHourly
 
-  // end time options: only slots after start_time
   const endTimeSlots = startTime
     ? TIME_SLOTS.filter((t) => timeToMinutes(t) > timeToMinutes(startTime))
     : TIME_SLOTS
+
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => api.employees.list(),
+  })
+  const { data: leaveTypes = [] } = useQuery({
+    queryKey: ['leave-types'],
+    queryFn: () => api.leaveTypes.list(),
+  })
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => api.auth.me(),
+  })
+  const { data: balances = [] } = useQuery({
+    queryKey: ['leave-balances-employee', employeeId],
+    queryFn: () => api.leaveBalances.getByEmployee(employeeId, new Date().getFullYear()),
+    enabled: !!employeeId,
+  })
+
+  useEffect(() => {
+    if (me?.id) setValue('employee_id', me.id)
+  }, [me?.id, setValue])
 
   useEffect(() => {
     if (isHalfDay) {
@@ -79,26 +99,20 @@ export default function NewLeaveRequest() {
     if (isSingleDay && startDate) setValue('end_date', startDate)
   }, [isSingleDay, startDate, setValue])
 
-  useEffect(() => {
-    if (employeeId) api.leaveBalances.getByEmployee(employeeId, new Date().getFullYear()).then(setBalances)
-  }, [employeeId])
-
-  useEffect(() => {
-    Promise.all([api.employees.list(), api.leaveTypes.list(), api.auth.me()]).then(([emps, types, me]) => {
-      setEmployees(emps.filter((e) => e.is_active))
-      setLeaveTypes(types)
-      setValue('employee_id', me.id)
-    })
-  }, [setValue])
-
   const selectedBalance = balances.find((b) => b.leave_type_id === leaveTypeId)
   const totalDays = watch('total_days') ?? 0
   const remaining = selectedBalance ? selectedBalance.allocated_days - selectedBalance.used_days - totalDays : null
 
-  const onSubmit = async (data: LeaveRequestFormData) => {
-    await api.leaveRequests.create(data)
-    navigate('/leave-requests')
-  }
+  const createMutation = useMutation({
+    mutationFn: (data: LeaveRequestFormData) => api.leaveRequests.create(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['leave-requests'] })
+      navigate('/leave-requests')
+    },
+    onError: (err) => toast.error((err as Error).message),
+  })
+
+  const onSubmit = (data: LeaveRequestFormData) => createMutation.mutate(data)
 
   return (
     <div className="max-w-lg">
@@ -112,7 +126,7 @@ export default function NewLeaveRequest() {
         <Field label="직원 *" error={errors.employee_id?.message}>
           <select {...register('employee_id')} className={sel}>
             <option value="">선택하세요</option>
-            {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            {employees.filter((e) => e.is_active).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
           </select>
         </Field>
 
@@ -123,7 +137,6 @@ export default function NewLeaveRequest() {
           </select>
         </Field>
 
-        {/* Leave unit */}
         <Field label="휴가 단위 *">
           <div className="grid grid-cols-2 gap-2">
             {UNIT_OPTIONS.map((opt) => (
@@ -143,7 +156,6 @@ export default function NewLeaveRequest() {
           </div>
         </Field>
 
-        {/* Time range (hourly only) */}
         {isHourly && (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -157,7 +169,6 @@ export default function NewLeaveRequest() {
                       className={sel}
                       onChange={(e) => {
                         field.onChange(e.target.value)
-                        // end_time이 start_time보다 같거나 앞이면 초기화
                         if (endTime && timeToMinutes(endTime) <= timeToMinutes(e.target.value)) {
                           setValue('end_time', undefined)
                         }
@@ -197,7 +208,6 @@ export default function NewLeaveRequest() {
           </div>
         )}
 
-        {/* Balance info */}
         {selectedBalance && (
           <div className="bg-violet-600/10 border border-violet-500/20 rounded-lg px-4 py-3 text-sm">
             <span className="text-violet-300">
@@ -211,7 +221,6 @@ export default function NewLeaveRequest() {
           </div>
         )}
 
-        {/* Date picker */}
         {isSingleDay ? (
           <Field label="날짜 *" error={errors.start_date?.message}>
             <Controller
@@ -238,7 +247,7 @@ export default function NewLeaveRequest() {
                 name="end_date"
                 control={control}
                 render={({ field }) => (
-                  <DatePicker value={field.value ?? ''} onChange={(v) => { field.onChange(v); }} placeholder="종료일" />
+                  <DatePicker value={field.value ?? ''} onChange={(v) => { field.onChange(v) }} placeholder="종료일" />
                 )}
               />
             </Field>

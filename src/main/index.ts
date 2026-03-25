@@ -1,3 +1,5 @@
+import 'dotenv/config'
+import 'reflect-metadata'
 import { app, BrowserWindow, shell } from 'electron'
 import { initDb } from './database/db'
 import { startServer, PORT } from './server'
@@ -29,7 +31,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  initDb()
+  await initDb()
   await startServer()
   createWindow()
 

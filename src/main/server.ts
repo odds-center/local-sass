@@ -1,5 +1,8 @@
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
+import morgan from 'morgan'
+import compression from 'compression'
 import path from 'path'
 import { Bonjour } from 'bonjour-service'
 import { requireAuth } from './middleware/auth'
@@ -12,14 +15,18 @@ import settingsRouter from './routes/settings'
 import setupRouter from './routes/setup'
 import importRouter from './routes/import'
 import scrumsRouter from './routes/scrums'
+import channelsRouter from './routes/channels'
 
-export const PORT = 8888
+export const PORT = Number(process.env.PORT) || 8888
 
 export function createServer() {
   const app = express()
 
+  app.use(helmet({ contentSecurityPolicy: false }))
+  app.use(morgan('dev'))
+  app.use(compression())
   app.use(cors())
-  app.use(express.json())
+  app.use(express.json({ limit: '5mb' }))
 
   // 인증 불필요
   app.use('/api/setup', setupRouter)
@@ -33,6 +40,7 @@ export function createServer() {
   app.use('/api/settings', requireAuth, settingsRouter)
   app.use('/api/import', requireAuth, importRouter)
   app.use('/api/scrums', requireAuth, scrumsRouter)
+  app.use('/api/channels', requireAuth, channelsRouter)
 
   // Serve React static files (production build)
   const distPath = path.join(__dirname, '../../dist')

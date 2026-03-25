@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { LeaveRequest } from '../../shared/types'
 import LeaveStatusBadge from '../components/LeaveStatusBadge'
 import Calendar from '../components/Calendar'
@@ -14,23 +14,15 @@ function formatDays(r: LeaveRequest): string {
 }
 
 export default function Dashboard() {
-  const [recentRequests, setRecentRequests] = useState<LeaveRequest[]>([])
-  const [allRequests, setAllRequests] = useState<LeaveRequest[]>([])
-  const [pendingCount, setPendingCount] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const { data: requests = [], isLoading } = useQuery({
+    queryKey: ['leave-requests', { year: new Date().getFullYear() }],
+    queryFn: () => api.leaveRequests.list({ year: new Date().getFullYear() }),
+  })
 
-  useEffect(() => {
-    async function load() {
-      const requests = await api.leaveRequests.list({ year: new Date().getFullYear() })
-      setPendingCount(requests.filter((r) => r.status === 'pending').length)
-      setRecentRequests(requests.slice(0, 8))
-      setAllRequests(requests)
-      setLoading(false)
-    }
-    load()
-  }, [])
+  const pendingCount = requests.filter((r) => r.status === 'pending').length
+  const recentRequests = requests.slice(0, 8)
 
-  if (loading) return <div className="text-zinc-500 text-sm pt-20 text-center">불러오는 중...</div>
+  if (isLoading) return <div className="text-zinc-500 text-sm pt-20 text-center">불러오는 중...</div>
 
   return (
     <div className="space-y-6">
@@ -44,7 +36,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-zinc-400">팀 휴가 달력</h2>
         </div>
-        <Calendar requests={allRequests} />
+        <Calendar requests={requests} />
       </div>
 
       <div className="bg-zinc-900 rounded-xl border border-zinc-800">

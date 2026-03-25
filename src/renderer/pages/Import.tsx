@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { api } from '../lib/api'
 import { Employee } from '../../shared/types'
 import {
   PageHeader, Card, CardTitle, Field, Button,
-  ErrorAlert, SuccessAlert, InfoAlert, inp,
+  SuccessAlert, InfoAlert, inp,
 } from '../components/ui'
 import { Download } from 'lucide-react'
 
@@ -15,18 +18,16 @@ type Result = {
 }
 
 export default function Import() {
-  const [employees, setEmployees] = useState<Employee[]>([])
   const [employeeId, setEmployeeId] = useState('')
   const [csvText, setCsvText] = useState('')
   const [fileName, setFileName] = useState('')
-  const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
-  const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    api.employees.list().then(setEmployees).catch(() => {})
-  }, [])
+  const { data: employees = [] } = useQuery<Employee[]>({
+    queryKey: ['employees'],
+    queryFn: () => api.employees.list(),
+  })
 
   const rowCount = csvText
     .split('\n')
@@ -40,7 +41,6 @@ export default function Import() {
   const handleFile = (file: File) => {
     setFileName(file.name)
     setResult(null)
-    setError('')
     const reader = new FileReader()
     reader.onload = (e) => setCsvText((e.target?.result as string) ?? '')
     reader.readAsText(file, 'utf-8')
@@ -52,22 +52,15 @@ export default function Import() {
     if (file?.name.endsWith('.csv')) handleFile(file)
   }
 
-  const handleImport = async () => {
-    if (!csvText.trim()) return
-    setLoading(true)
-    setError('')
-    setResult(null)
-    try {
-      const res = await api.import.upload(csvText, employeeId || undefined)
+  const importMutation = useMutation({
+    mutationFn: () => api.import.upload(csvText, employeeId || undefined),
+    onSuccess: (res) => {
       setResult(res)
       setCsvText('')
       setFileName('')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '임포트 중 오류가 발생했습니다.')
-    } finally {
-      setLoading(false)
-    }
-  }
+    },
+    onError: (err) => toast.error((err as Error).message),
+  })
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -78,7 +71,7 @@ export default function Import() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => api.import.downloadTemplate().catch(() => {})}
+            onClick={() => { api.import.downloadTemplate() }}
           >
             <Download size={14} className="inline mr-1" />CSV 템플릿 다운로드
           </Button>
@@ -149,8 +142,6 @@ export default function Import() {
         </div>
       </Card>
 
-      <ErrorAlert message={error} />
-
       {result && (
         <SuccessAlert>
           <p className="font-semibold text-emerald-200">임포트 완료</p>
@@ -163,11 +154,11 @@ export default function Import() {
       )}
 
       <Button
-        onClick={handleImport}
-        disabled={loading || rowCount === 0}
+        onClick={() => importMutation.mutate()}
+        disabled={importMutation.isPending || rowCount === 0}
         className="w-full py-2.5"
       >
-        {loading ? '임포트 중...' : rowCount > 0 ? `${rowCount}개 행 임포트` : 'CSV 파일을 먼저 선택하세요'}
+        {importMutation.isPending ? '임포트 중...' : rowCount > 0 ? `${rowCount}개 행 임포트` : 'CSV 파일을 먼저 선택하세요'}
       </Button>
     </div>
   )

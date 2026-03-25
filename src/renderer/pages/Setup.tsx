@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
+import { useAuthStore } from '../store/auth'
 import { Check, ArrowRight, ArrowLeft, CheckCircle, XCircle, Rocket } from 'lucide-react'
 
 type Step = 1 | 2 | 3
@@ -9,6 +10,7 @@ const inp = 'w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text
 
 export default function Setup() {
   const navigate = useNavigate()
+  const setUser = useAuthStore((s) => s.setUser)
   const [step, setStep] = useState<Step>(1)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -47,8 +49,8 @@ export default function Setup() {
   const handleFinish = async () => {
     setLoading(true); setError('')
     try {
-      const { token } = await api.setup.init({ companyName, name, email, password, discordWebhookUrl: discordWebhookUrl || undefined })
-      localStorage.setItem('token', token)
+      const { token, user } = await api.setup.init({ companyName, name, email, password })
+      setUser(user, token)
       navigate('/dashboard')
     } catch (e) {
       setError(e instanceof Error ? e.message : '설정 중 오류가 발생했습니다.')
