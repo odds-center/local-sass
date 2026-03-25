@@ -88,10 +88,13 @@ export default function Settings() {
       </Section>
 
       <Section title="Discord 웹훅">
-        <Field label="Webhook URL">
+        <Field label="휴가 알림 Webhook URL">
           <input value={settings.discord_webhook_url} onChange={(e) => set('discord_webhook_url', e.target.value)} className={inp} placeholder="https://discord.com/api/webhooks/..." />
         </Field>
         <button onClick={testDiscord} className="flex items-center gap-1.5 text-sm text-violet-400 hover:text-violet-300 transition-colors"><Send size={13} />테스트 메시지 전송</button>
+        <Field label="스크럼 Webhook URL">
+          <input value={settings.scrum_webhook_url} onChange={(e) => set('scrum_webhook_url', e.target.value)} className={inp} placeholder="https://discord.com/api/webhooks/..." />
+        </Field>
       </Section>
 
       <Section title="Google Calendar">

@@ -11,6 +11,7 @@ import leaveTypesRouter from './routes/leave-types'
 import settingsRouter from './routes/settings'
 import setupRouter from './routes/setup'
 import importRouter from './routes/import'
+import scrumsRouter from './routes/scrums'
 
 export const PORT = 8888
 
@@ -31,6 +32,7 @@ export function createServer() {
   app.use('/api/leave-types', requireAuth, leaveTypesRouter)
   app.use('/api/settings', requireAuth, settingsRouter)
   app.use('/api/import', requireAuth, importRouter)
+  app.use('/api/scrums', requireAuth, scrumsRouter)
 
   // Serve React static files (production build)
   const distPath = path.join(__dirname, '../../dist')

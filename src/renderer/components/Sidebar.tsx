@@ -8,6 +8,7 @@ import {
   Settings,
   LogOut,
   Plus,
+  ClipboardList,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
@@ -15,6 +16,7 @@ const NAV_ITEMS = [
   { to: '/leave-requests',label: '휴가 신청',   Icon: CalendarDays },
   { to: '/employees',     label: '직원 관리',   Icon: Users },
   { to: '/leave-balances',label: '잔여 일수',   Icon: BarChart2 },
+  { to: '/scrum',         label: '스크럼',      Icon: ClipboardList },
   { to: '/import',        label: '데이터 임포트', Icon: Upload },
   { to: '/settings',      label: '설정',        Icon: Settings },
 ]

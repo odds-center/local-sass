@@ -61,12 +61,29 @@ export interface LeaveRequest {
 
 export interface AppSettings {
   discord_webhook_url: string
+  scrum_webhook_url: string
   google_client_id: string
   google_client_secret: string
   google_refresh_token: string
   google_calendar_id: string
   app_company_name: string
   current_user_id: string
+}
+
+export interface ScrumItem {
+  text: string
+  done: boolean
+}
+
+export interface Scrum {
+  id: string
+  employee_id: string
+  date: string
+  items: ScrumItem[]
+  sent_at: string | null
+  created_at: string
+  updated_at: string
+  employee_name?: string
 }
 
 export interface Api {

@@ -6,6 +6,8 @@ import {
   AppSettings,
   LeaveRequestFilters,
   CreateLeaveRequestInput,
+  Scrum,
+  ScrumItem,
 } from '../../shared/types'
 
 const BASE = '/api'
@@ -154,6 +156,15 @@ export const api = {
       post<{ ok: boolean; importedRequests: number; importedBalances: number; skipped: number; employeeId: string }>(
         '/import', { csvText, employeeId }
       ),
+  },
+
+  scrums: {
+    getMe: (date: string) => get<Scrum | null>(`/scrums/me?date=${date}`),
+    recent: () => get<Scrum[]>('/scrums/recent'),
+    team: (date: string) => get<Scrum[]>(`/scrums/team?date=${date}`),
+    save: (date: string, items: ScrumItem[]) => put<Scrum>(`/scrums/me?date=${date}`, { items }),
+    send: (date: string) => post<{ ok: boolean }>(`/scrums/me/send?date=${date}`),
+    sendAll: (date: string) => post<{ ok: boolean; sent: number }>(`/scrums/send-all?date=${date}`),
   },
 
   settings: {

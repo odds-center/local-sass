@@ -6,6 +6,7 @@ import { startGoogleOAuth, listGoogleCalendars } from '../integrations/google-ca
 
 const DEFAULT_SETTINGS: AppSettings = {
   discord_webhook_url: '',
+  scrum_webhook_url: '',
   google_client_id: '',
   google_client_secret: '',
   google_refresh_token: '',

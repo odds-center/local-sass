@@ -11,6 +11,7 @@ import LeaveDetail from './pages/LeaveDetail'
 import LeaveBalances from './pages/LeaveBalances'
 import Settings from './pages/Settings'
 import Import from './pages/Import'
+import Scrum from './pages/Scrum'
 import { api } from './lib/api'
 
 function isLoggedIn(): boolean {
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="/leave-balances" element={<LeaveBalances />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/import" element={<Import />} />
+          <Route path="/scrum" element={<Scrum />} />
         </Route>
       </Routes>
     </HashRouter>
